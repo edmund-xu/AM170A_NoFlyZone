@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import replace
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
-from dataclasses import replace
-
 
 from obstacles import RectangleZone
 from physics import DronePhysics
@@ -30,13 +29,11 @@ class Visualizer:
                 dtype=float,
             )
 
-        # comparison curves
         E_ideal = energy_curve(0.0)
         E_base = energy_curve(base_drag)
         E_low_drag = energy_curve(0.5 * base_drag)
         E_high_drag = energy_curve(2.0 * base_drag)
 
-        # optimal point on baseline curve
         idx = int(np.argmin(E_base))
         T_opt = float(Ts[idx])
         E_opt = float(E_base[idx])
@@ -47,48 +44,42 @@ class Visualizer:
             Ts, E_ideal,
             linestyle="-.",
             linewidth=2.0,
-            color="#7A7A7A",
             label="No drag reference",
         )
         ax.plot(
             Ts, E_base,
             linewidth=2.6,
-            color="#C44E52",
             label=f"Baseline drag (C = {base_drag:.2f})",
         )
         ax.plot(
             Ts, E_low_drag,
             linestyle=":",
             linewidth=2.0,
-            color="#55A868",
             label="Reduced drag",
         )
         ax.plot(
             Ts, E_high_drag,
             linestyle="--",
             linewidth=2.0,
-            color="#4C72B0",
             label="Increased drag",
         )
 
         ax.scatter(
             [T_opt], [E_opt],
             s=110,
-            color="#DD8452",
             edgecolor="black",
             zorder=5,
             label=f"Optimal time ≈ {T_opt:.1f} s",
         )
-        ax.axvline(T_opt, linestyle="--", linewidth=1.5, color="#444444", alpha=0.7)
+        ax.axvline(T_opt, linestyle="--", linewidth=1.5, alpha=0.7)
 
         ax.set_xlabel("Segment travel time T [s]", fontsize=13)
         ax.set_ylabel("Segment energy E(T) [J]", fontsize=13)
         ax.set_title(f"Segment Energy vs Travel Time (d = {distance:.0f} m)", fontsize=17)
-
         ax.grid(True, alpha=0.35)
         ax.legend(fontsize=10)
-        fig.tight_layout()
 
+        fig.tight_layout()
         PLOTS_DIR.mkdir(parents=True, exist_ok=True)
         fig.savefig(PLOTS_DIR / "energy_curve.png", dpi=150)
         plt.close(fig)
@@ -106,25 +97,11 @@ class Visualizer:
         fig, axes = plt.subplots(1, 3, figsize=(18, 6.5))
         obstacles = obstacles or []
 
-        def draw_polyline(
-            ax: Axes,
-            pts: list[np.ndarray],
-            *,
-            label: str = "",
-        ) -> None:
+        def draw_polyline(ax: Axes, pts: list[np.ndarray], *, label: str = "") -> None:
             xs = [float(p[0]) for p in pts]
             ys = [float(p[1]) for p in pts]
 
-            ax.plot(
-                xs,
-                ys,
-                linestyle="--",
-                linewidth=2,
-                color="blue",
-                alpha=0.9,
-                label=label,
-                zorder=2,
-            )
+            ax.plot(xs, ys, linestyle="--", linewidth=2, alpha=0.9, label=label, zorder=2)
 
             if len(xs) >= 2:
                 mid = len(xs) // 2
@@ -134,16 +111,10 @@ class Visualizer:
                     "",
                     xy=(x1, y1),
                     xytext=(x0, y0),
-                    arrowprops=dict(
-                        arrowstyle="->",
-                        lw=1.8,
-                        color="blue",
-                        alpha=0.8,
-                    ),
+                    arrowprops=dict(arrowstyle="->", lw=1.8, alpha=0.8),
                 )
 
         def draw_route(ax: Axes, order: list[int], title: str) -> None:
-            # Draw all no-fly zones
             for obs_idx, obs in enumerate(obstacles):
                 obs.draw(
                     ax,
@@ -152,19 +123,16 @@ class Visualizer:
                     label="No-fly zone" if obs_idx == 0 else "",
                 )
 
-            # Draw waypoints
             ax.scatter(
                 waypoints[:, 0],
                 waypoints[:, 1],
                 s=90,
-                color="#4C72B0",
                 edgecolor="black",
                 linewidth=1.2,
                 zorder=3,
                 label="Waypoint",
             )
 
-            # Highlight the start/end point (node 0)
             start_x, start_y = waypoints[0]
             ax.scatter(
                 start_x,
@@ -177,11 +145,9 @@ class Visualizer:
                 label="Start/End",
             )
 
-            # Label nodes
             for idx, (x, y) in enumerate(waypoints):
                 ax.text(x + 10, y + 10, str(idx), fontsize=11)
 
-            # Draw route edges
             for k in range(len(order)):
                 i = order[k]
                 j = order[(k + 1) % len(order)]
@@ -197,7 +163,6 @@ class Visualizer:
                         [yi, yj],
                         linestyle="--",
                         linewidth=2,
-                        color="blue",
                         alpha=0.9,
                         label="Route" if k == 0 else "",
                         zorder=2,
@@ -207,12 +172,7 @@ class Visualizer:
                         "",
                         xy=(xj, yj),
                         xytext=(xi, yi),
-                        arrowprops=dict(
-                            arrowstyle="->",
-                            lw=1.8,
-                            color="blue",
-                            alpha=0.8,
-                        ),
+                        arrowprops=dict(arrowstyle="->", lw=1.8, alpha=0.8),
                     )
 
             ax.set_title(title, fontsize=16)
@@ -225,13 +185,13 @@ class Visualizer:
             by_label = dict(zip(labels, handles))
             ax.legend(by_label.values(), by_label.keys(), fontsize=11)
 
-        draw_route(axes[0], naive_order, "Naive Route (A*-aware)")
-        draw_route(axes[1], optimized_order, "Nearest Neighbor Route (A*-aware)")
-        draw_route(axes[2], super_order, "NN + 2-opt Route (A*-aware)")
+        draw_route(axes[0], naive_order, "Naive Route")
+        draw_route(axes[1], optimized_order, "Nearest Neighbor Route")
+        draw_route(axes[2], super_order, "NN + 2-opt Route")
 
-        fig.suptitle("Drone Route Comparison with No-Fly Zones", fontsize=20, y=1.02)
-
+        fig.suptitle("Drone Route Comparison", fontsize=20, y=1.02)
         fig.tight_layout()
+
         PLOTS_DIR.mkdir(parents=True, exist_ok=True)
         fig.savefig(PLOTS_DIR / filename, dpi=200, bbox_inches="tight")
         plt.close(fig)
@@ -247,9 +207,8 @@ class Visualizer:
 
         labels = ["Naive", "Nearest Neighbor", "NN + 2-opt"]
         vals = [naive_energy, optimized_energy, super_energy]
-        colors = ["#4C72B0", "#55A868", "#C44E52"]
 
-        bars = ax.bar(labels, vals, color=colors, edgecolor="black", linewidth=1.2)
+        bars = ax.bar(labels, vals, edgecolor="black", linewidth=1.2)
 
         ax.set_title("Total Energy Comparison", fontsize=20, pad=15)
         ax.set_ylabel("Energy [J]", fontsize=14)
@@ -268,8 +227,78 @@ class Visualizer:
             )
 
         ax.set_ylim(0, max(vals) * 1.15)
-
         fig.tight_layout()
+
         PLOTS_DIR.mkdir(parents=True, exist_ok=True)
         fig.savefig(PLOTS_DIR / filename, dpi=200)
         plt.close(fig)
+
+    def plot_benchmark_ratio(
+        self,
+        N_values: list[int],
+        mean_values: list[float],
+        std_values: list[float] | None,
+        *,
+        ylabel: str,
+        title: str,
+        filename: str,
+    ) -> None:
+        fig, ax = plt.subplots(figsize=(8.8, 5.8))
+
+        if std_values is not None and len(std_values) == len(N_values):
+            ax.errorbar(
+                N_values,
+                mean_values,
+                yerr=std_values,
+                marker="o",
+                markersize=7,
+                linewidth=2.2,
+                capsize=4,
+            )
+        else:
+            ax.plot(
+                N_values,
+                mean_values,
+                marker="o",
+                markersize=7,
+                linewidth=2.2,
+            )
+
+        ax.axhline(1.0, linestyle="--", linewidth=1.4, alpha=0.7)
+        ax.set_xlabel("Number of waypoints N", fontsize=13)
+        ax.set_ylabel(ylabel, fontsize=13)
+        ax.set_title(title, fontsize=17)
+        ax.grid(True, alpha=0.35)
+
+        fig.tight_layout()
+        PLOTS_DIR.mkdir(parents=True, exist_ok=True)
+        fig.savefig(PLOTS_DIR / filename, dpi=180)
+        plt.close(fig)
+
+    def plot_benchmark_results(
+        self,
+        N_values_nn: list[int],
+        mean_e2_over_enn: list[float],
+        std_e2_over_enn: list[float] | None,
+        brute_Ns: list[int] | None = None,
+        mean_e2_over_emin: list[float] | None = None,
+        std_e2_over_emin: list[float] | None = None,
+    ) -> None:
+        self.plot_benchmark_ratio(
+            N_values=N_values_nn,
+            mean_values=mean_e2_over_enn,
+            std_values=std_e2_over_enn,
+            ylabel="Mean ratio E2 / ENN",
+            title="NN + 2-opt relative to Nearest Neighbor",
+            filename="benchmark_E2_over_ENN.png",
+        )
+
+        if brute_Ns and mean_e2_over_emin is not None:
+            self.plot_benchmark_ratio(
+                N_values=brute_Ns,
+                mean_values=mean_e2_over_emin,
+                std_values=std_e2_over_emin,
+                ylabel="Mean ratio E2 / Emin",
+                title="NN + 2-opt relative to brute-force optimum",
+                filename="benchmark_E2_over_Emin.png",
+            )
