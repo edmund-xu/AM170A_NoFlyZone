@@ -290,7 +290,7 @@ class Visualizer:
             std_values=std_e2_over_enn,
             ylabel="Mean ratio E2 / ENN",
             title="NN + 2-opt relative to Nearest Neighbor",
-            filename="benchmark_E2_over_ENN.png",
+            filename="E2_over_ENN.png",
         )
 
         if brute_Ns and mean_e2_over_emin is not None:
@@ -300,5 +300,5 @@ class Visualizer:
                 std_values=std_e2_over_emin,
                 ylabel="Mean ratio E2 / Emin",
                 title="NN + 2-opt relative to brute-force optimum",
-                filename="benchmark_E2_over_Emin.png",
+                filename="E2_over_Emin.png",
             )
