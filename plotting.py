@@ -5,6 +5,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
+from dataclasses import replace
+
 
 from obstacles import RectangleZone
 from physics import DronePhysics
@@ -15,24 +17,76 @@ PLOTS_DIR = Path(__file__).resolve().parent / "plots"
 class Visualizer:
     def plot_energy_curve(self, physics_model: DronePhysics, distance: float) -> None:
         T_low, T_high = physics_model.feasible_time_bounds(distance)
+        Ts = np.linspace(T_low, T_high, 250)
 
-        Ts = np.linspace(T_low, T_high, 220)
-        Es = np.array([physics_model.segment_energy(distance, T) for T in Ts], dtype=float)
+        base_params = physics_model.p
+        base_drag = base_params.drag_coeff
 
-        idx = int(np.argmin(Es))
+        def energy_curve(drag_value: float) -> np.ndarray:
+            test_params = replace(base_params, drag_coeff=drag_value)
+            test_physics = DronePhysics(test_params)
+            return np.array(
+                [test_physics.segment_energy(distance, T) for T in Ts],
+                dtype=float,
+            )
+
+        # comparison curves
+        E_ideal = energy_curve(0.0)
+        E_base = energy_curve(base_drag)
+        E_low_drag = energy_curve(0.5 * base_drag)
+        E_high_drag = energy_curve(2.0 * base_drag)
+
+        # optimal point on baseline curve
+        idx = int(np.argmin(E_base))
         T_opt = float(Ts[idx])
-        E_opt = float(Es[idx])
+        E_opt = float(E_base[idx])
 
-        fig, ax = plt.subplots(figsize=(9, 5.5))
-        ax.plot(Ts, Es, linewidth=2, label="Energy vs Time")
-        ax.scatter([T_opt], [E_opt], s=90, zorder=5, label=f"Tmin={T_opt:.2f}s")
-        ax.axvline(T_opt, linestyle="--", alpha=0.6)
+        fig, ax = plt.subplots(figsize=(9.2, 5.8))
 
-        ax.set_xlabel("Segment Time T [s]", fontsize=14)
-        ax.set_ylabel("Energy [J]", fontsize=14)
-        ax.set_title(f"Segment Energy vs Time (d = {distance:.0f} m)", fontsize=18)
-        ax.grid(True, alpha=0.5)
-        ax.legend(fontsize=11)
+        ax.plot(
+            Ts, E_ideal,
+            linestyle="-.",
+            linewidth=2.0,
+            color="#7A7A7A",
+            label="No drag reference",
+        )
+        ax.plot(
+            Ts, E_base,
+            linewidth=2.6,
+            color="#C44E52",
+            label=f"Baseline drag (C = {base_drag:.2f})",
+        )
+        ax.plot(
+            Ts, E_low_drag,
+            linestyle=":",
+            linewidth=2.0,
+            color="#55A868",
+            label="Reduced drag",
+        )
+        ax.plot(
+            Ts, E_high_drag,
+            linestyle="--",
+            linewidth=2.0,
+            color="#4C72B0",
+            label="Increased drag",
+        )
+
+        ax.scatter(
+            [T_opt], [E_opt],
+            s=110,
+            color="#DD8452",
+            edgecolor="black",
+            zorder=5,
+            label=f"Optimal time ≈ {T_opt:.1f} s",
+        )
+        ax.axvline(T_opt, linestyle="--", linewidth=1.5, color="#444444", alpha=0.7)
+
+        ax.set_xlabel("Segment travel time T [s]", fontsize=13)
+        ax.set_ylabel("Segment energy E(T) [J]", fontsize=13)
+        ax.set_title(f"Segment Energy vs Travel Time (d = {distance:.0f} m)", fontsize=17)
+
+        ax.grid(True, alpha=0.35)
+        ax.legend(fontsize=10)
         fig.tight_layout()
 
         PLOTS_DIR.mkdir(parents=True, exist_ok=True)
