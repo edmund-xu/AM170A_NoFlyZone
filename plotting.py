@@ -181,16 +181,26 @@ class Visualizer:
             ax.grid(True, alpha=0.35)
             ax.set_aspect("equal", adjustable="box")
 
-            handles, labels = ax.get_legend_handles_labels()
-            by_label = dict(zip(labels, handles))
-            ax.legend(by_label.values(), by_label.keys(), fontsize=11)
-
         draw_route(axes[0], naive_order, "Naive Route")
         draw_route(axes[1], optimized_order, "Nearest Neighbor Route")
         draw_route(axes[2], super_order, "NN + 2-opt Route")
 
+        # Build one shared legend for the whole figure
+        handles, labels = axes[0].get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        fig.legend(
+            by_label.values(),
+            by_label.keys(),
+            loc="upper left",
+            bbox_to_anchor=(0.02, 1.02),
+            ncol=4,
+            frameon=True,
+        )
+
         fig.suptitle("Drone Route Comparison", fontsize=20, y=1.02)
-        fig.tight_layout()
+
+        # Leave room on the right for the shared legend
+        fig.tight_layout(rect=[0, 0, 1, 0.93])
 
         PLOTS_DIR.mkdir(parents=True, exist_ok=True)
         fig.savefig(PLOTS_DIR / filename, dpi=200, bbox_inches="tight")
