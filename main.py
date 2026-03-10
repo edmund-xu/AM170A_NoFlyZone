@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-
 import numpy as np
 
 from obstacles import RectangleZone
@@ -25,6 +24,7 @@ PLOTS_DIR = Path(__file__).resolve().parent / "plots"
 def compute_route_stats(
     simulation_config: SimulationConfig,
 ) -> dict[str, float | list[int] | np.ndarray | dict]:
+
     config = simulation_config or get_default_sim_config()
     params = get_default_params()
 
@@ -34,27 +34,35 @@ def compute_route_stats(
         waypoint_set=config.waypoint_set,
         seed=config.seed,
     )
+
     waypoints = targets.generate_waypoints(
         obstacles=config.obstacles if config.use_obstacles else None
     )
+
     n = waypoints.shape[0]
 
     physics = DronePhysics(params)
     optimizer = RoutingOptimizer(physics)
 
     path_lookup = None
+
     if config.use_obstacles and config.obstacles:
+
         planner = AStarPlanner(
             bounds=config.bounds,
             obstacles=config.obstacles,
             grid_step=config.grid_step,
             allow_diagonal=True,
         )
+
         distance_matrix, path_lookup = planner.build_obstacle_aware_distance_matrix(
             waypoints
         )
+
         planning_mode = "Obstacle-aware A* path lengths"
+
     else:
+
         distance_matrix = targets.get_distance_matrix(waypoints)
         planning_mode = "Straight-line Euclidean distances"
 
@@ -66,6 +74,7 @@ def compute_route_stats(
 
     brute_order = None
     brute_energy = None
+
     if n <= 8:
         brute_order = optimizer.solve_tsp(energy_matrix, method="brute")
         brute_energy = optimizer.tour_cost(energy_matrix, brute_order)
@@ -98,11 +107,8 @@ def compute_route_stats(
 def benchmark_results(
     N_values: list[int],
     trials_per_N: int = 10,
-    bounds: tuple[float, float] = (0.0, 2000.0),
-    use_obstacles: bool = False,
-    obstacles: list[RectangleZone] | None = None,
-    grid_step: float = 25.0,
-) -> None:
+):
+
     PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 
     mean_ratio_twoopt_vs_nn = []
@@ -113,17 +119,22 @@ def benchmark_results(
     brute_Ns = []
 
     for N in N_values:
+
         ratios_twoopt_vs_nn = []
         ratios_twoopt_vs_brute = []
 
         for trial in range(trials_per_N):
+
             cfg = SimulationConfig(
                 num_targets=N,
                 seed=1000 * N + trial,
-                bounds=bounds,
-                use_obstacles=use_obstacles,
-                obstacles=obstacles or [],
-                grid_step=grid_step,
+                bounds=(0.0, 2000.0),
+
+                # BENCHMARKS DO NOT USE OBSTACLES
+                use_obstacles=False,
+                obstacles=[],
+
+                grid_step=25.0,
             )
 
             stats = compute_route_stats(cfg)
@@ -137,23 +148,16 @@ def benchmark_results(
             if E_min is not None:
                 ratios_twoopt_vs_brute.append(E_2 / float(E_min))
 
-        mean_ratio_twoopt_vs_nn.append(float(np.mean(ratios_twoopt_vs_nn)))
-        std_ratio_twoopt_vs_nn.append(float(np.std(ratios_twoopt_vs_nn)))
+        mean_ratio_twoopt_vs_nn.append(np.mean(ratios_twoopt_vs_nn))
+        std_ratio_twoopt_vs_nn.append(np.std(ratios_twoopt_vs_nn))
 
-        if len(ratios_twoopt_vs_brute) > 0:
+        if ratios_twoopt_vs_brute:
             brute_Ns.append(N)
-            mean_ratio_twoopt_vs_brute.append(float(np.mean(ratios_twoopt_vs_brute)))
-            std_ratio_twoopt_vs_brute.append(float(np.std(ratios_twoopt_vs_brute)))
-
-        print(f"N = {N}")
-        print(f"  mean(E2/ENN)   = {np.mean(ratios_twoopt_vs_nn):.4f}")
-        print(f"  std(E2/ENN)    = {np.std(ratios_twoopt_vs_nn):.4f}")
-        if len(ratios_twoopt_vs_brute) > 0:
-            print(f"  mean(E2/Emin)  = {np.mean(ratios_twoopt_vs_brute):.4f}")
-            print(f"  std(E2/Emin)   = {np.std(ratios_twoopt_vs_brute):.4f}")
-        print()
+            mean_ratio_twoopt_vs_brute.append(np.mean(ratios_twoopt_vs_brute))
+            std_ratio_twoopt_vs_brute.append(np.std(ratios_twoopt_vs_brute))
 
     visualizer = Visualizer()
+
     visualizer.plot_benchmark_results(
         N_values_nn=N_values,
         mean_e2_over_enn=mean_ratio_twoopt_vs_nn,
@@ -165,48 +169,16 @@ def benchmark_results(
 
     print("Benchmark plots saved:")
     print(" - plots/benchmark_E2_over_ENN.png")
-    if len(brute_Ns) > 0:
-        print(" - plots/benchmark_E2_over_Emin.png")
+    print(" - plots/benchmark_E2_over_Emin.png")
 
 
-def main(simulation_config: SimulationConfig | None = None) -> None:
+def main(simulation_config: SimulationConfig | None = None):
+
     stats = compute_route_stats(simulation_config)
+
     physics = DronePhysics(get_default_params())
-
-    print("=== Drone Routing Optimization (Stop-at-Waypoint) ===")
-    print(f"Planning mode: {stats['planning_mode']}")
-    print(f"Waypoints (x,y):\n{stats['waypoints']}\n")
-
-    print("=== Route Indices (cycle closes back to 0) ===")
-    print(f"Naive:     {stats['naive_order']}")
-    print(f"Optimized: {stats['nn_order']} (nearest neighbor)")
-    print(f"Super:     {stats['two_opt_order']} (nearest neighbor + 2-opt)")
-    if stats["brute_order"] is not None:
-        print(f"Brute:     {stats['brute_order']} (exact optimum)")
-    print()
-
-    print("=== Total Distance Comparison ===")
-    print(f"Naive distance:     {stats['naive_distance']:.2f} m")
-    print(f"Optimized distance: {stats['nn_distance']:.2f} m")
-    print(f"Super distance:     {stats['two_opt_distance']:.2f} m")
-    print()
-
-    print("=== Total Energy Comparison ===")
-    print(f"Naive energy:     {stats['naive_energy']:.2f} J")
-    print(f"Optimized energy: {stats['nn_energy']:.2f} J")
-    print(f"Super energy:     {stats['two_opt_energy']:.2f} J")
-    if stats["brute_energy"] is not None:
-        print(f"Brute energy:     {stats['brute_energy']:.2f} J")
-        print(f"E2 / ENN  = {stats['two_opt_energy'] / stats['nn_energy']:.4f}")
-        print(f"E2 / Emin = {stats['two_opt_energy'] / stats['brute_energy']:.4f}")
-    print()
-
-    print("=== Total Time (sum of per-segment Tmin) ===")
-    print(f"Naive time:     {stats['naive_time']:.2f} s")
-    print(f"Optimized time: {stats['nn_time']:.2f} s")
-    print(f"Super time:     {stats['two_opt_time']:.2f} s")
-
     visualizer = Visualizer()
+
     visualizer.plot_energy_curve(physics, distance=1000.0)
 
     visualizer.plot_routes_three(
@@ -226,58 +198,46 @@ def main(simulation_config: SimulationConfig | None = None) -> None:
         filename="total_energy.png",
     )
 
-    print("\nPlots saved:")
+    print("Plots saved:")
     print(" - plots/energy_curve.png")
     print(" - plots/route_map.png")
     print(" - plots/total_energy.png")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Drone routing optimization with no-fly zones, A*, NN, 2-opt, and benchmarking"
-    )
-    parser.add_argument("-n", "--num-targets", type=int, default=5)
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--benchmark", action="store_true")
+    parser.add_argument("--trials", type=int, default=10)
+    parser.add_argument("-n", "--num-targets", type=int, default=7)
     parser.add_argument("-s", "--seed", type=int, default=None)
-    parser.add_argument(
-        "--test",
-        action="store_true",
-        help="Use a fixed waypoint set with a no-fly zone",
-    )
-    parser.add_argument(
-        "--benchmark",
-        action="store_true",
-        help="Run multi-configuration benchmark study",
-    )
-    parser.add_argument(
-        "--trials",
-        type=int,
-        default=10,
-        help="Number of random configurations per N",
-    )
-    parser.add_argument(
-        "--grid-step",
-        type=float,
-        default=25.0,
-        help="Grid spacing for A* pathfinding in meters",
-    )
+
     args = parser.parse_args()
 
     if args.benchmark:
+
         benchmark_results(
             N_values=list(range(6, 13)),
             trials_per_N=args.trials,
-            use_obstacles=False,
         )
+
     else:
-        if args.test:
-            cfg = get_test_sim_config()
-        else:
-            cfg = SimulationConfig(
-                num_targets=args.num_targets,
-                seed=args.seed,
-                bounds=(0.0, 2000.0),
-                use_obstacles=False,
-                obstacles=[],
-                grid_step=args.grid_step,
-            )
+
+        # DEFAULT RUN USES A NO-FLY ZONE
+
+        cfg = SimulationConfig(
+            num_targets=args.num_targets,
+            seed=args.seed,
+            bounds=(0.0, 2000.0),
+
+            use_obstacles=True,
+            obstacles=[
+                RectangleZone(xmin=350, xmax=650, ymin=350, ymax=650, pad=20),
+                RectangleZone(xmin=900, xmax=1150, ymin=200, ymax=500, pad=20),
+                RectangleZone(xmin=1200, xmax=1500, ymin=1100, ymax=1400, pad=20),
+            ],
+            grid_step=25.0,
+        )
+
         main(cfg)
