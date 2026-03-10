@@ -94,14 +94,21 @@ class Visualizer:
         obstacles: list[RectangleZone] | None = None,
         path_lookup: dict[tuple[int, int], list[np.ndarray]] | None = None,
     ) -> None:
-        fig, axes = plt.subplots(1, 3, figsize=(18, 6.5))
+        fig, axes = plt.subplots(1, 3, figsize=(20, 7.8))
         obstacles = obstacles or []
 
         def draw_polyline(ax: Axes, pts: list[np.ndarray], *, label: str = "") -> None:
             xs = [float(p[0]) for p in pts]
             ys = [float(p[1]) for p in pts]
 
-            ax.plot(xs, ys, linestyle="--", linewidth=2, alpha=0.9, label=label, zorder=2)
+            ax.plot(
+                xs, ys,
+                linestyle="--",
+                linewidth=2.4,
+                alpha=0.95,
+                label=label,
+                zorder=2,
+            )
 
             if len(xs) >= 2:
                 mid = len(xs) // 2
@@ -111,7 +118,7 @@ class Visualizer:
                     "",
                     xy=(x1, y1),
                     xytext=(x0, y0),
-                    arrowprops=dict(arrowstyle="->", lw=1.8, alpha=0.8),
+                    arrowprops=dict(arrowstyle="->", lw=2.0, alpha=0.85),
                 )
 
         def draw_route(ax: Axes, order: list[int], title: str) -> None:
@@ -126,9 +133,9 @@ class Visualizer:
             ax.scatter(
                 waypoints[:, 0],
                 waypoints[:, 1],
-                s=90,
+                s=120,
                 edgecolor="black",
-                linewidth=1.2,
+                linewidth=1.4,
                 zorder=3,
                 label="Waypoint",
             )
@@ -137,16 +144,16 @@ class Visualizer:
             ax.scatter(
                 start_x,
                 start_y,
-                s=200,
+                s=260,
                 facecolor="none",
                 edgecolor="green",
-                linewidth=3,
+                linewidth=3.2,
                 zorder=4,
                 label="Start/End",
             )
 
             for idx, (x, y) in enumerate(waypoints):
-                ax.text(x + 10, y + 10, str(idx), fontsize=11)
+                ax.text(x + 12, y + 12, str(idx), fontsize=13)
 
             for k in range(len(order)):
                 i = order[k]
@@ -162,8 +169,8 @@ class Visualizer:
                         [xi, xj],
                         [yi, yj],
                         linestyle="--",
-                        linewidth=2,
-                        alpha=0.9,
+                        linewidth=2.4,
+                        alpha=0.95,
                         label="Route" if k == 0 else "",
                         zorder=2,
                     )
@@ -172,12 +179,13 @@ class Visualizer:
                         "",
                         xy=(xj, yj),
                         xytext=(xi, yi),
-                        arrowprops=dict(arrowstyle="->", lw=1.8, alpha=0.8),
+                        arrowprops=dict(arrowstyle="->", lw=2.0, alpha=0.85),
                     )
 
-            ax.set_title(title, fontsize=16)
-            ax.set_xlabel("x [m]")
-            ax.set_ylabel("y [m]")
+            ax.set_title(title, fontsize=18, pad=10)
+            ax.set_xlabel("x [m]", fontsize=14)
+            ax.set_ylabel("y [m]", fontsize=14)
+            ax.tick_params(axis="both", labelsize=12)
             ax.grid(True, alpha=0.35)
             ax.set_aspect("equal", adjustable="box")
 
@@ -185,25 +193,27 @@ class Visualizer:
         draw_route(axes[1], optimized_order, "Nearest Neighbor Route")
         draw_route(axes[2], super_order, "NN + 2-opt Route")
 
-        # Build one shared legend for the whole figure
         handles, labels = axes[0].get_legend_handles_labels()
         by_label = dict(zip(labels, handles))
         fig.legend(
             by_label.values(),
             by_label.keys(),
             loc="upper left",
-            bbox_to_anchor=(0.02, 1.02),
+            bbox_to_anchor=(0.03, 0.985),
             ncol=4,
+            fontsize=13,
             frameon=True,
+            columnspacing=1.6,
+            handlelength=2.2,
+            borderpad=0.6,
         )
 
-        fig.suptitle("Drone Route Comparison", fontsize=20, y=1.02)
+        fig.suptitle("Drone Route Comparison", fontsize=22, y=0.99)
 
-        # Leave room on the right for the shared legend
-        fig.tight_layout(rect=[0, 0, 1, 0.93])
+        fig.tight_layout(rect=[0, 0, 1, 0.90])
 
         PLOTS_DIR.mkdir(parents=True, exist_ok=True)
-        fig.savefig(PLOTS_DIR / filename, dpi=200, bbox_inches="tight")
+        fig.savefig(PLOTS_DIR / filename, dpi=300, bbox_inches="tight")
         plt.close(fig)
 
     def plot_total_energy_three(
