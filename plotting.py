@@ -94,7 +94,28 @@ class Visualizer:
         obstacles: list[RectangleZone] | None = None,
         path_lookup: dict[tuple[int, int], list[np.ndarray]] | None = None,
     ) -> None:
-        fig, axes = plt.subplots(1, 3, figsize=(20, 7.8))
+        from matplotlib.gridspec import GridSpec
+
+        fig = plt.figure(figsize=(20, 22))
+        # Small top strip for title + legend, then 2 rows of plots
+        gs = GridSpec(
+            3, 2,
+            figure=fig,
+            height_ratios=[0.06, 1, 1],
+            hspace=0.32,
+            wspace=0.25,
+        )
+
+        ax_header = fig.add_subplot(gs[0, :])
+        ax_header.axis("off")
+
+        ax0 = fig.add_subplot(gs[1, 0])
+        ax1 = fig.add_subplot(gs[1, 1])
+        ax2 = fig.add_subplot(gs[2, 0])
+        ax_blank = fig.add_subplot(gs[2, 1])
+        ax_blank.axis("off")
+
+        axes = [ax0, ax1, ax2]
         obstacles = obstacles or []
 
         def draw_polyline(ax: Axes, pts: list[np.ndarray], *, label: str = "") -> None:
@@ -133,7 +154,7 @@ class Visualizer:
             ax.scatter(
                 waypoints[:, 0],
                 waypoints[:, 1],
-                s=120,
+                s=160,
                 edgecolor="black",
                 linewidth=1.4,
                 zorder=3,
@@ -144,7 +165,7 @@ class Visualizer:
             ax.scatter(
                 start_x,
                 start_y,
-                s=260,
+                s=340,
                 facecolor="none",
                 edgecolor="green",
                 linewidth=3.2,
@@ -153,7 +174,7 @@ class Visualizer:
             )
 
             for idx, (x, y) in enumerate(waypoints):
-                ax.text(x + 12, y + 12, str(idx), fontsize=13)
+                ax.text(x + 12, y + 12, str(idx), fontsize=16)
 
             for k in range(len(order)):
                 i = order[k]
@@ -182,35 +203,32 @@ class Visualizer:
                         arrowprops=dict(arrowstyle="->", lw=2.0, alpha=0.85),
                     )
 
-            ax.set_title(title, fontsize=18, pad=10)
-            ax.set_xlabel("x [m]", fontsize=14)
-            ax.set_ylabel("y [m]", fontsize=14)
-            ax.tick_params(axis="both", labelsize=12)
+            ax.set_title(title, fontsize=22, pad=12)
+            ax.set_xlabel("x [m]", fontsize=18)
+            ax.set_ylabel("y [m]", fontsize=18)
+            ax.tick_params(axis="both", labelsize=15)
             ax.grid(True, alpha=0.35)
             ax.set_aspect("equal", adjustable="box")
 
-        draw_route(axes[0], naive_order, "Naive Route")
-        draw_route(axes[1], optimized_order, "Nearest Neighbor Route")
-        draw_route(axes[2], super_order, "NN + 2-opt Route")
+        draw_route(axes[0], naive_order, "(a) Naive Route")
+        draw_route(axes[1], optimized_order, "(b) Nearest Neighbor Route")
+        draw_route(axes[2], super_order, "(c) NN + 2-opt Route")
 
         handles, labels = axes[0].get_legend_handles_labels()
         by_label = dict(zip(labels, handles))
-        fig.legend(
+
+        ax_header.legend(
             by_label.values(),
             by_label.keys(),
-            loc="upper left",
-            bbox_to_anchor=(0.03, 0.985),
+            loc="center",
+            bbox_to_anchor=(0.5, 0.5),
             ncol=4,
-            fontsize=13,
+            fontsize=16,
             frameon=True,
-            columnspacing=1.6,
-            handlelength=2.2,
-            borderpad=0.6,
+            columnspacing=2.0,
+            handlelength=2.4,
+            borderpad=0.8,
         )
-
-        fig.suptitle("Drone Route Comparison", fontsize=22, y=0.99)
-
-        fig.tight_layout(rect=[0, 0, 1, 0.90])
 
         PLOTS_DIR.mkdir(parents=True, exist_ok=True)
         fig.savefig(PLOTS_DIR / filename, dpi=300, bbox_inches="tight")
