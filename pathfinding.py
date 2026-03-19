@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import heapq
 import math
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -15,6 +14,10 @@ GridNode = tuple[int, int]
 class AStarPlanner:
     """
     Grid-based A* planner for obstacle-aware pairwise waypoint routing.
+
+    Important behavior:
+    - If two waypoints have clear line of sight, we use the straight segment directly.
+    - Only if a no-fly zone blocks that segment do we fall back to A* on the grid.
     """
 
     def __init__(
@@ -52,13 +55,110 @@ class AStarPlanner:
         x, y = self.node_to_point(node)
         return any(obs.contains_point(x, y) for obs in self.obstacles)
 
-    def validate_waypoints(self, waypoints):
+    def validate_waypoints(self, waypoints: np.ndarray) -> None:
         for idx, (x, y) in enumerate(waypoints):
             for obs in self.obstacles:
                 if obs.contains_point(float(x), float(y)):
                     raise ValueError(
                         f"Waypoint {idx} at ({x:.1f}, {y:.1f}) lies inside a no-fly zone."
                     )
+
+    # ---------- exact line-of-sight geometry ----------
+    @staticmethod
+    def _orientation(
+        a: tuple[float, float],
+        b: tuple[float, float],
+        c: tuple[float, float],
+    ) -> float:
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+    @staticmethod
+    def _on_segment(
+        a: tuple[float, float],
+        b: tuple[float, float],
+        c: tuple[float, float],
+        eps: float = 1e-9,
+    ) -> bool:
+        return (
+            min(a[0], b[0]) - eps <= c[0] <= max(a[0], b[0]) + eps
+            and min(a[1], b[1]) - eps <= c[1] <= max(a[1], b[1]) + eps
+        )
+
+    @classmethod
+    def _segments_intersect(
+        cls,
+        p1: tuple[float, float],
+        p2: tuple[float, float],
+        q1: tuple[float, float],
+        q2: tuple[float, float],
+        eps: float = 1e-9,
+    ) -> bool:
+        o1 = cls._orientation(p1, p2, q1)
+        o2 = cls._orientation(p1, p2, q2)
+        o3 = cls._orientation(q1, q2, p1)
+        o4 = cls._orientation(q1, q2, p2)
+
+        # Proper intersection
+        if ((o1 > eps and o2 < -eps) or (o1 < -eps and o2 > eps)) and (
+            (o3 > eps and o4 < -eps) or (o3 < -eps and o4 > eps)
+        ):
+            return True
+
+        # Collinear / touching cases
+        if abs(o1) <= eps and cls._on_segment(p1, p2, q1, eps):
+            return True
+        if abs(o2) <= eps and cls._on_segment(p1, p2, q2, eps):
+            return True
+        if abs(o3) <= eps and cls._on_segment(q1, q2, p1, eps):
+            return True
+        if abs(o4) <= eps and cls._on_segment(q1, q2, p2, eps):
+            return True
+
+        return False
+
+    def line_intersects_rectangle(
+        self,
+        A: np.ndarray,
+        B: np.ndarray,
+        obs: RectangleZone,
+    ) -> bool:
+        """
+        True if segment AB intersects or touches the padded rectangle.
+        """
+        x1, y1 = float(A[0]), float(A[1])
+        x2, y2 = float(B[0]), float(B[1])
+
+        xmin = obs.xmin - obs.pad
+        xmax = obs.xmax + obs.pad
+        ymin = obs.ymin - obs.pad
+        ymax = obs.ymax + obs.pad
+
+        # Endpoint inside padded rectangle
+        if xmin <= x1 <= xmax and ymin <= y1 <= ymax:
+            return True
+        if xmin <= x2 <= xmax and ymin <= y2 <= ymax:
+            return True
+
+        p1 = (x1, y1)
+        p2 = (x2, y2)
+
+        edges = [
+            ((xmin, ymin), (xmax, ymin)),
+            ((xmax, ymin), (xmax, ymax)),
+            ((xmax, ymax), (xmin, ymax)),
+            ((xmin, ymax), (xmin, ymin)),
+        ]
+
+        for q1, q2 in edges:
+            if self._segments_intersect(p1, p2, q1, q2):
+                return True
+
+        return False
+
+    def has_line_of_sight(self, A: np.ndarray, B: np.ndarray) -> bool:
+        return not any(
+            self.line_intersects_rectangle(A, B, obs) for obs in self.obstacles
+        )
 
     # ---------- A* helpers ----------
     def neighbors(self, node: GridNode) -> list[tuple[GridNode, float]]:
@@ -77,7 +177,11 @@ class AStarPlanner:
             if self.is_blocked_node(nxt):
                 continue
 
-            step_cost = self.grid_step * math.sqrt(2.0) if dx != 0 and dy != 0 else self.grid_step
+            step_cost = (
+                self.grid_step * math.sqrt(2.0)
+                if dx != 0 and dy != 0
+                else self.grid_step
+            )
             out.append((nxt, step_cost))
         return out
 
@@ -113,7 +217,9 @@ class AStarPlanner:
 
         came_from: dict[GridNode, GridNode] = {}
         g_score: dict[GridNode, float] = {start: 0.0}
-        f_score: dict[GridNode, float] = {start: self.heuristic(start, goal)}
+        f_score: dict[GridNode, float] = {
+            start: self.heuristic(start, goal) * self.grid_step
+        }
 
         while open_heap:
             _, current = heapq.heappop(open_heap)
@@ -150,8 +256,9 @@ class AStarPlanner:
     ) -> tuple[np.ndarray, dict[tuple[int, int], list[np.ndarray]]]:
         """
         Returns:
-            distance_matrix[i,j] = obstacle-aware A* path length
-            path_lookup[(i,j)] = list of points along the A* polyline
+            distance_matrix[i, j] = straight-line distance if visible,
+                                    otherwise obstacle-aware A* path length
+            path_lookup[(i, j)] = list of points along the chosen path
         """
         self.validate_waypoints(waypoints)
 
@@ -164,10 +271,19 @@ class AStarPlanner:
                 if i == j:
                     dist_matrix[i, j] = 0.0
                     path_lookup[(i, j)] = [waypoints[i].copy()]
+                    continue
+
+                A = np.asarray(waypoints[i], dtype=float)
+                B = np.asarray(waypoints[j], dtype=float)
+
+                if self.has_line_of_sight(A, B):
+                    path = [A.copy(), B.copy()]
+                    dist = float(np.linalg.norm(B - A))
                 else:
-                    path = self.astar(waypoints[i], waypoints[j])
+                    path = self.astar(A, B)
                     dist = self.polyline_length(path)
-                    dist_matrix[i, j] = dist
-                    path_lookup[(i, j)] = path
+
+                dist_matrix[i, j] = dist
+                path_lookup[(i, j)] = path
 
         return dist_matrix, path_lookup
