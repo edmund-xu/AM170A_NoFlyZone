@@ -147,7 +147,7 @@ class Visualizer:
         PLOTS_DIR.mkdir(parents=True, exist_ok=True)
         fig.savefig(PLOTS_DIR / "energy_curve.png", dpi=250, bbox_inches="tight")
         plt.close(fig)
-        
+
     def plot_routes_three(
         self,
         waypoints: np.ndarray,
@@ -287,13 +287,18 @@ class Visualizer:
             loc="center",
             bbox_to_anchor=(0.5, 0.5),
             ncol=4,
-            fontsize=16,
-            frameon=True,
-            columnspacing=2.0,
-            handlelength=2.4,
-            borderpad=0.8,
-        )
 
+            fontsize=20,          # 🔥 bigger text (this drives overall size)
+            markerscale=1.2,      # keep symbols normal-ish
+
+            handlelength=3.5,
+            handleheight=2.0,
+            labelspacing=1.5,
+            borderpad=1.8,
+            columnspacing=3.0,
+
+            frameon=True,
+        )
         PLOTS_DIR.mkdir(parents=True, exist_ok=True)
         fig.savefig(PLOTS_DIR / filename, dpi=300, bbox_inches="tight")
         plt.close(fig)
