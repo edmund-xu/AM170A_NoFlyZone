@@ -15,75 +15,139 @@ PLOTS_DIR = Path(__file__).resolve().parent / "plots"
 
 class Visualizer:
     def plot_energy_curve(self, physics_model: DronePhysics, distance: float) -> None:
-        T_low, T_high = physics_model.feasible_time_bounds(distance)
-        Ts = np.linspace(T_low, T_high, 250)
-
         base_params = physics_model.p
         base_drag = base_params.drag_coeff
 
-        def energy_curve(drag_value: float) -> np.ndarray:
+        T_low, T_high = physics_model.feasible_time_bounds(distance)
+
+        # Main plotting grid for drag-based comparisons
+        Ts = np.linspace(T_low, T_high, 400)
+
+        # Wider grid for the no-drag validation curve so its minimum is visible
+        T0_star_analytic = ((9.0 * base_params.mass * distance**2) / (2.0 * base_params.hover_power)) ** (1.0 / 3.0)
+        T_no_drag_min = max(1e-3, min(0.55 * T_low, 0.75 * T0_star_analytic))
+        Ts_no_drag = np.linspace(T_no_drag_min, T_high, 500)
+
+        def energy_curve(drag_value: float, Tvals: np.ndarray) -> np.ndarray:
             test_params = replace(base_params, drag_coeff=drag_value)
             test_physics = DronePhysics(test_params)
             return np.array(
-                [test_physics.segment_energy(distance, T) for T in Ts],
+                [test_physics.segment_energy(distance, T) for T in Tvals],
                 dtype=float,
             )
 
-        E_ideal = energy_curve(0.0)
-        E_base = energy_curve(base_drag)
-        E_low_drag = energy_curve(0.5 * base_drag)
-        E_high_drag = energy_curve(2.0 * base_drag)
+        def analytic_no_drag_energy(Tvals: np.ndarray) -> np.ndarray:
+            m = base_params.mass
+            P_h = base_params.hover_power
+            return P_h * Tvals + (9.0 * m * distance**2) / (4.0 * Tvals**2)
 
+        # Numerical curves
+        E_base = energy_curve(base_drag, Ts)
+        E_low_drag = energy_curve(0.5 * base_drag, Ts)
+        E_high_drag = energy_curve(2.0 * base_drag, Ts)
+
+        # No-drag numerical + analytical validation
+        E_no_drag_num = energy_curve(0.0, Ts_no_drag)
+        E_no_drag_analytic = analytic_no_drag_energy(Ts_no_drag)
+        E0_star_analytic = float(analytic_no_drag_energy(np.array([T0_star_analytic]))[0])
+
+        # Baseline optimum
         idx = int(np.argmin(E_base))
         T_opt = float(Ts[idx])
         E_opt = float(E_base[idx])
 
-        fig, ax = plt.subplots(figsize=(9.2, 5.8))
+        fig, ax = plt.subplots(figsize=(11.5, 7.2))
+
+        # No-drag numerical curve
+        ax.plot(
+            Ts_no_drag,
+            E_no_drag_num,
+            linestyle="-.",
+            linewidth=3.0,
+            label="No drag (numerical)",
+        )
+
+        # No-drag analytical validation overlay
+        ax.plot(
+            Ts_no_drag,
+            E_no_drag_analytic,
+            linestyle="--",
+            linewidth=2.2,
+            alpha=0.9,
+            label="No drag (analytical)",
+        )
 
         ax.plot(
-            Ts, E_ideal,
-            linestyle="-.",
-            linewidth=2.0,
-            label="No drag reference",
-        )
-        ax.plot(
-            Ts, E_base,
-            linewidth=2.6,
+            Ts,
+            E_base,
+            linewidth=3.2,
             label=f"Baseline drag (C = {base_drag:.2f})",
         )
         ax.plot(
-            Ts, E_low_drag,
+            Ts,
+            E_low_drag,
             linestyle=":",
-            linewidth=2.0,
+            linewidth=3.0,
             label="Reduced drag",
         )
         ax.plot(
-            Ts, E_high_drag,
+            Ts,
+            E_high_drag,
             linestyle="--",
-            linewidth=2.0,
+            linewidth=3.0,
             label="Increased drag",
         )
 
+        # Baseline optimum marker
         ax.scatter(
-            [T_opt], [E_opt],
-            s=110,
+            [T_opt],
+            [E_opt],
+            s=180,
             edgecolor="black",
-            zorder=5,
-            label=f"Optimal time ≈ {T_opt:.1f} s",
+            linewidth=1.5,
+            zorder=6,
+            label=f"Baseline optimum ≈ {T_opt:.1f} s",
         )
-        ax.axvline(T_opt, linestyle="--", linewidth=1.5, alpha=0.7)
+        ax.axvline(T_opt, linestyle="--", linewidth=2.0, alpha=0.7)
 
-        ax.set_xlabel("Segment travel time T [s]", fontsize=13)
-        ax.set_ylabel("Segment energy E(T) [J]", fontsize=13)
-        ax.set_title(f"Segment Energy vs Travel Time (d = {distance:.0f} m)", fontsize=17)
+        # Analytical no-drag optimum marker
+        ax.scatter(
+            [T0_star_analytic],
+            [E0_star_analytic],
+            s=140,
+            edgecolor="black",
+            linewidth=1.2,
+            zorder=6,
+            label=f"No-drag analytical optimum ≈ {T0_star_analytic:.1f} s",
+        )
+
+        # Optional: show feasible lower bound for the constrained search
+        ax.axvline(T_low, linestyle=":", linewidth=2.0, alpha=0.8)
+        ax.text(
+            T_low,
+            ax.get_ylim()[0] if len(ax.lines) == 0 else min(E_base.min(), E_no_drag_num.min()) * 1.02,
+            " feasible $T_{low}$",
+            fontsize=13,
+            ha="left",
+            va="bottom",
+        )
+
+        ax.set_xlabel("Segment travel time $T$ [s]", fontsize=18)
+        ax.set_ylabel("Segment energy $E(T)$ [J]", fontsize=18)
+        ax.set_title(
+            f"Segment Energy vs Travel Time ($d={distance:.0f}$ m)",
+            fontsize=24,
+            pad=14,
+        )
+        ax.tick_params(axis="both", labelsize=14)
         ax.grid(True, alpha=0.35)
-        ax.legend(fontsize=10)
+        ax.legend(fontsize=13, loc="best", frameon=True)
 
         fig.tight_layout()
         PLOTS_DIR.mkdir(parents=True, exist_ok=True)
-        fig.savefig(PLOTS_DIR / "energy_curve.png", dpi=150)
+        fig.savefig(PLOTS_DIR / "energy_curve.png", dpi=250, bbox_inches="tight")
         plt.close(fig)
-
+        
     def plot_routes_three(
         self,
         waypoints: np.ndarray,
