@@ -310,18 +310,33 @@ class Visualizer:
         super_energy: float,
         filename: str = "total_energy.png",
     ) -> None:
-        fig, ax = plt.subplots(figsize=(9, 6))
+        fig, ax = plt.subplots(figsize=(10, 7))  # slightly bigger figure
 
         labels = ["Naive", "Nearest Neighbor", "NN + 2-opt"]
         vals = [naive_energy, optimized_energy, super_energy]
 
-        bars = ax.bar(labels, vals, edgecolor="black", linewidth=1.2)
+        # ✅ Different colors for each bar
+        colors = ["tab:red", "tab:blue", "tab:green"]
 
-        ax.set_title("Total Energy Comparison", fontsize=20, pad=15)
-        ax.set_ylabel("Energy [J]", fontsize=14)
+        bars = ax.bar(
+            labels,
+            vals,
+            color=colors,
+            edgecolor="black",
+            linewidth=1.5
+        )
+
+        # ✅ Bigger title and axis labels
+        ax.set_title("Total Energy Comparison", fontsize=24, pad=18)
+        ax.set_ylabel("Energy [J]", fontsize=18)
+
+        # ✅ Bigger tick labels
+        ax.tick_params(axis="both", labelsize=16)
+
         ax.grid(True, axis="y", alpha=0.35)
         ax.set_axisbelow(True)
 
+        # ✅ Bigger value labels on top of bars
         for bar in bars:
             height = bar.get_height()
             ax.text(
@@ -330,14 +345,16 @@ class Visualizer:
                 f"{height:,.0f} J",
                 ha="center",
                 va="bottom",
-                fontsize=12,
+                fontsize=14,
+                fontweight="bold",
             )
 
-        ax.set_ylim(0, max(vals) * 1.15)
+        ax.set_ylim(0, max(vals) * 1.2)
+
         fig.tight_layout()
 
         PLOTS_DIR.mkdir(parents=True, exist_ok=True)
-        fig.savefig(PLOTS_DIR / filename, dpi=200)
+        fig.savefig(PLOTS_DIR / filename, dpi=250)
         plt.close(fig)
 
     def plot_benchmark_ratio(
